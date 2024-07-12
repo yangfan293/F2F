@@ -24,7 +24,6 @@ To reproduce the results of HAKE, run the following commands.
 ### HAKE
 ```
 bash runs.sh train HAKE F2F-V2 0 3 512 1024 500 12 1 0.00005 20000 16 1 1
-
 ```
 ## Citation
 If you find this code useful, please consider citing the following paper.
