@@ -1,0 +1,10 @@
+0	instantiateobject
+1	specifycomponent
+2	iscomponentof
+3	specifytask
+4	instantiatetask
+5	include
+6	whichgrasptype
+7	whichfinger
+8	whichforce
+9	whichcomponent

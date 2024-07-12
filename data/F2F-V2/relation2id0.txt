@@ -1,0 +1,12 @@
+11
+instantiateobject	0
+specifycomponent	1
+iscomponentof	2
+specifytask	3
+instantiatetask	4
+include	5
+instancegrasptype	6
+whichgrasptype	7
+whichfinger	8
+whichforce	9
+whichcomponent	10

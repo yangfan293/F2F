@@ -1,0 +1,4 @@
+press_drill000 whichcomponent drill_button
+press_drill000 whichforce strong
+press_drill000 whichfinger index_finger
+press_drill000  whichgrasptype grasptype_1
