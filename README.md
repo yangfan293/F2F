@@ -9,7 +9,7 @@ This is the F2F Knowledge Graph data set and code of paper **Task-oriented Tool 
 
 ### Usage
 ```
-bash runs.sh {train | valid | test} {ModE | HAKE} {wn18rr | FB15k-237 | YAGO3-10} <gpu_id> \
+bash runs.sh {train | valid | test} {HAKE} {F2F-V2 | your Knowledge Graph} <gpu_id> \
 <save_id> <train_batch_size> <negative_sample_size> <hidden_dim> <gamma> <alpha> \
 <learning_rate> <num_train_steps> <test_batch_size> [modulus_weight] [phase_weight]
 ```
