@@ -17,6 +17,7 @@ class ModeType(Enum):
     TRAIN = 0
     VALID = 1
     TEST = 2
+    TASK = 3
 
 
 class DataReader(object):
@@ -26,6 +27,7 @@ class DataReader(object):
         train_data_path = os.path.join(data_path, 'train.txt')
         valid_data_path = os.path.join(data_path, 'valid.txt')
         test_data_path = os.path.join(data_path, 'test.txt')
+        task_data_path = os.path.join(data_path, 'task.txt')
 
         self.entity_dict = self.read_dict(entity_dict_path)
         self.relation_dict = self.read_dict(relation_dict_path)
@@ -33,6 +35,7 @@ class DataReader(object):
         self.train_data = self.read_data(train_data_path, self.entity_dict, self.relation_dict)
         self.valid_data = self.read_data(valid_data_path, self.entity_dict, self.relation_dict)
         self.test_data = self.read_data(test_data_path, self.entity_dict, self.relation_dict)
+        self.task_data = self.read_data(task_data_path, self.entity_dict, self.relation_dict)
 
     def read_dict(self, dict_path: str):
         """
@@ -173,14 +176,16 @@ class TrainDataset(Dataset):
 
         return hr_map, tr_map, hr_freq, tr_freq
 
-
 class TestDataset(Dataset):
     def __init__(self, data_reader: DataReader, mode: ModeType, batch_type: BatchType):
+        self.data_reader = data_reader
         self.triple_set = set(data_reader.train_data + data_reader.valid_data + data_reader.test_data)
         if mode == ModeType.VALID:
             self.triples = data_reader.valid_data
         elif mode == ModeType.TEST:
             self.triples = data_reader.test_data
+        elif mode == ModeType.TASK:
+            self.triples = data_reader.task_data
 
         self.len = len(self.triples)
 
@@ -188,7 +193,8 @@ class TestDataset(Dataset):
         self.num_relation = len(data_reader.relation_dict)
 
         self.mode = mode
-        self.batch_type = batch_type
+        # self.batch_type = batch_type
+        self.batch_type = BatchType.TAIL_BATCH
 
     def __len__(self):
         return self.len
@@ -196,16 +202,42 @@ class TestDataset(Dataset):
     def __getitem__(self, idx):
         head, relation, tail = self.triples[idx]
 
+        # -----------------yf----------------------------
+        # 确定遍历的实体索引范围
+        if relation == self.data_reader.relation_dict['whichgrasptype']:
+            entity_range = range(161, 175)
+        elif relation == self.data_reader.relation_dict['whichfinger']:
+            entity_range = list(range(29, 34)) + [374]
+        elif relation == self.data_reader.relation_dict['whichforce']:
+            entity_range = range(371, 375)
+        elif relation == self.data_reader.relation_dict['whichcomponent']:
+            entity_range = range(343, 371)
+        else:
+            # 如果不是以上任何一种关系，可以选择一个默认的范围，或者抛出异常
+            entity_range = range(self.num_entity)
+
         if self.batch_type == BatchType.HEAD_BATCH:
             tmp = [(0, rand_head) if (rand_head, relation, tail) not in self.triple_set
-                   else (-1, head) for rand_head in range(self.num_entity)]
+                   else (-1, head) for rand_head in entity_range]
             tmp[head] = (0, head)
         elif self.batch_type == BatchType.TAIL_BATCH:
-            tmp = [(0, rand_tail) if (head, relation, rand_tail) not in self.triple_set
-                   else (-1, tail) for rand_tail in range(self.num_entity)]
-            tmp[tail] = (0, tail)
+            tmp = [(0, rand_tail) for rand_tail in entity_range]
         else:
             raise ValueError('negative batch type {} not supported'.format(self.mode))
+        # -----------------yf----------------------------
+
+        #-----------------------hake------------------------
+        # if self.batch_type == BatchType.HEAD_BATCH:
+        #     tmp = [(0, rand_head) if (rand_head, relation, tail) not in self.triple_set
+        #            else (-1, head) for rand_head in range(self.num_entity)]
+        #     tmp[head] = (0, head)
+        # elif self.batch_type == BatchType.TAIL_BATCH:
+        #     tmp = [(0, rand_tail) if (head, relation, rand_tail) not in self.triple_set
+        #            else (-1, tail) for rand_tail in range(self.num_entity)]
+        #     tmp[tail] = (0, tail)
+        # else:
+        #     raise ValueError('negative batch type {} not supported'.format(self.mode))
+        # -----------------------hake------------------------
 
         tmp = torch.LongTensor(tmp)
         filter_bias = tmp[:, 0].float()
