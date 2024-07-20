@@ -101,18 +101,19 @@ class KGEModel(nn.Module, ABC):
 
         elif batch_type == BatchType.TAIL_BATCH:
             head_part, tail_part = sample
-            batch_size, negative_sample_size = tail_part.size(0), tail_part.size(1)
-
+            # batch_size, negative_sample_size = tail_part.size(0), tail_part.size(1)
+            batch_size = 1
+            negative_sample_size = tail_part.size(0)
             head = torch.index_select(
                 self.entity_embedding,
                 dim=0,
-                index=head_part[:, 0]
+                index=head_part[0]
             ).unsqueeze(1)
 
             relation = torch.index_select(
                 self.relation_embedding,
                 dim=0,
-                index=head_part[:, 1]
+                index=head_part[1]
             ).unsqueeze(1)
 
             tail = torch.index_select(
@@ -211,9 +212,9 @@ class KGEModel(nn.Module, ABC):
         with torch.no_grad():
             for test_dataset in test_dataset_list:
                 for positive_sample, negative_sample, filter_bias, batch_type in test_dataset:
-                    positive_sample = positive_sample.cuda()
-                    negative_sample = negative_sample.cuda()
-                    filter_bias = filter_bias.cuda()
+                    # positive_sample = positive_sample.cuda()
+                    # negative_sample = negative_sample.cuda()
+                    # filter_bias = filter_bias.cuda()
 
                     batch_size = positive_sample.size(0)
 
@@ -238,8 +239,8 @@ class KGEModel(nn.Module, ABC):
                         ranking_test = (argsort[i, :] == positive_arg[i]).nonzero()
                         assert ranking.size(0) == 1
 
-                        entities_dict = load_entities_dict('/home/yf/code/KGE-HAKE-master/data/F2F-V2/entities.dict')
-                        relation_dict = load_entities_dict('/home/yf/code/KGE-HAKE-master/data/F2F-V2/relations.dict')
+                        entities_dict = load_entities_dict('D:/code/KGE-HAKE-master/data/F2F_submit/entities.dict')
+                        relation_dict = load_entities_dict('D:/code/KGE-HAKE-master/data/F2F_submit/relations.dict')
 
                         if ranking_test == 1:
                             entity = positive_arg[i].item()
@@ -253,20 +254,7 @@ class KGEModel(nn.Module, ABC):
                                 print('prediction:', entities_dict.get(en[0], en[0]),
                                       relation_dict.get(en[1], en[1]),
                                       entities_dict.get(entity, entity))
-                        #----------------- 输出索引--------------------------------
-                        # if ranking_test == 1:
-                        #     entity = positive_arg[i].item()
-                        #     if batch_type == BatchType.HEAD_BATCH:
-                        #         en = positive_sample[i, 1:].tolist()
-                        #         print('prediction:', entity, en[0], en[1], batch_type)
-                        #         # positive_arg = positive_sample[:, 0]
-                        #     elif batch_type == BatchType.TAIL_BATCH:
-                        #         en = positive_sample[i, 0:2].tolist()
-                        #         print('prediction:', en[0], en[1], entity, batch_type)
-                                # positive_arg = positive_sample[:, 2]
-                        # ----------------- 输出索引--------------------------------
-
-                        # ranking + 1 is the true ranking used in evaluation metrics
+                    # ranking + 1 is the true ranking used in evaluation metrics
                         ranking = 1 + ranking.item()
                         logs.append({
                             'MRR': 1.0 / ranking,
@@ -296,118 +284,70 @@ class KGEModel(nn.Module, ABC):
         '''
 
         model.eval()
-
-        test_dataloader_head = DataLoader(
-            TestDataset(
-                data_reader,
-                mode,
-                BatchType.HEAD_BATCH
-            ),
-            batch_size=args.test_batch_size,
-            num_workers=max(1, args.cpu_num // 2),
-            collate_fn=TestDataset.collate_fn
-        )
-
-        test_dataloader_tail = DataLoader(
-            TestDataset(
-                data_reader,
-                mode,
-                BatchType.TAIL_BATCH
-            ),
-            batch_size=args.test_batch_size,
-            num_workers=max(1, args.cpu_num // 2),
-            collate_fn=TestDataset.collate_fn
-        )
-
-        test_dataset_list = [test_dataloader_head, test_dataloader_tail]
-
         logs = []
-
         step = 0
-        total_steps = sum([len(dataset) for dataset in test_dataset_list])
+
 
         with torch.no_grad():
             predicted_triples = []
-            for test_dataset in test_dataset_list:
-                for positive_sample, negative_sample, filter_bias, batch_type in test_dataset:
-                    positive_sample = positive_sample.cuda()
-                    negative_sample = negative_sample.cuda()
-                    filter_bias = filter_bias.cuda()
 
-                    batch_size = positive_sample.size(0)
+            #-------------------yf-------------------------
+            test_dataset = TestDataset(data_reader, mode, BatchType.TAIL_BATCH)
+            total_steps = 4
+            for i in range(4):  # test 54，task 4, valid 59, all 586
+                positive_sample, negative_sample, filter_bias, batch_type = test_dataset[i]
+                score = model((positive_sample, negative_sample), batch_type)
 
-                    score = model((positive_sample, negative_sample), batch_type)
+                score += filter_bias
 
-                    score += filter_bias
+                # Explicitly sort all the entities to ensure that there is no test exposure bias
+                sorted_score, argsort0 = torch.sort(score, dim=1, descending=True)
 
-                    # Explicitly sort all the entities to ensure that there is no test exposure bias
-                    argsort = torch.argsort(score, dim=1, descending=True)
-
-                    if batch_type == BatchType.HEAD_BATCH:
-                        positive_arg = positive_sample[:, 0]
-                    elif batch_type == BatchType.TAIL_BATCH:
-                        positive_arg = positive_sample[:, 2]
-                    else:
-                        raise ValueError('mode %s not supported' % mode)
-
-                    for i in range(batch_size):
-                        # Notice that argsort is not ranking
-
-                        ranking = (argsort[i, :] == positive_arg[i]).nonzero()
-                        ranking_test = (argsort[i, :] == positive_arg[i]).nonzero()
-                        assert ranking.size(0) == 1
-
-                        #----------------yf--------------------------
-                        entities_dict = load_entities_dict('/home/yf/code/KGE-HAKE-master/data/F2F-V2/entities.dict')
-                        relation_dict = load_entities_dict('/home/yf/code/KGE-HAKE-master/data/F2F-V2/relations.dict')
-                        # ----------------yf--------------------------
-                        # entities_dict = load_entities_dict('/home/yf/code/KGE-HAKE-master/F2F-V2-V1/entities.dict')
-                        # relation_dict = load_entities_dict('/home/yf/code/KGE-HAKE-master/F2F-V2-V1/relations.dict')
-
-                        if ranking_test == 1:
-                            entity = positive_arg[i].item()
-                            if batch_type == BatchType.HEAD_BATCH:
-                                en = positive_sample[i, 1:].tolist()
-                                # 保存预测的三元组
-                                triple = (entities_dict.get(entity, entity),
-                                          relation_dict.get(en[0], en[0]),
-                                          entities_dict.get(en[1], en[1]))
-                            elif batch_type == BatchType.TAIL_BATCH:
-                                en = positive_sample[i, 0:2].tolist()
-                                # 保存预测的三元组
-                                triple = (entities_dict.get(en[0], en[0]),
-                                          relation_dict.get(en[1], en[1]),
-                                          entities_dict.get(entity, entity))
-
-                                # 输出预测
-                            print('prediction:', triple)
-
-                            # 将三元组添加到列表中
-                            predicted_triples.append(triple)
-
-                        # 最后，predicted_triples 将包含所有预测的三元组
+                # argsort = torch.argsort(score, dim=1, descending=True)
+                # 需要取出对应索引
+                argsort0 = argsort0.squeeze()
+                sorted_score = sorted_score.squeeze()
+                argsort = torch.gather(negative_sample, 0, argsort0)
 
 
-                        # ranking + 1 is the true ranking used in evaluation metrics
-                        ranking = 1 + ranking.item()
-                        logs.append({
-                            'MRR': 1.0 / ranking,
-                            'MR': float(ranking),
-                            'HITS@1': 1.0 if ranking <= 1 else 0.0,
-                            'HITS@3': 1.0 if ranking <= 3 else 0.0,
-                            'HITS@10': 1.0 if ranking <= 10 else 0.0,
-                        })
+                if argsort[0] == positive_sample[2]:
+                    ranking = 1
+                else:
+                    ranking = 0
+                    print('sorted_score, argsort', sorted_score[0], argsort[0])
+                    entities_dict = load_entities_dict('D:/code/KGE-HAKE-master/data/F2F_submit/entities.dict')
+                    relation_dict = load_entities_dict('D:/code/KGE-HAKE-master/data/F2F_submit/relations.dict')
+                    en = argsort[0].item()
+                    po = positive_sample[0:3].tolist()
+                    # 保存预测的三元组
+                    triple_pre = (entities_dict.get(po[0], po[0]),
+                              relation_dict.get(po[1], po[1]),
+                              entities_dict.get(en, en))
+                    predicted_triples.append(triple_pre)
 
-                    if step % args.test_log_steps == 0:
-                        logging.info('Evaluating the model... ({}/{})'.format(step, total_steps))
+                    triple_tru = (entities_dict.get(po[0], po[0]),
+                                  relation_dict.get(po[1], po[1]),
+                                  entities_dict.get(po[2], po[2]))
+                    predicted_triples.append(triple_tru)
 
-                    step += 1
+                    # 输出预测
+                    print('prediction_pre:', triple_pre)
+                    # print('prediction_tru:', triple_tru)
 
-        metrics = {}
-        for metric in logs[0].keys():
-            metrics[metric] = sum([log[metric] for log in logs]) / len(logs)
+                logs.append({
+                    'HITS@1': 1.0 if ranking == 1 else 0.0,
+                })
 
-        return metrics
+            if step % args.test_log_steps == 0:
+                logging.info('Evaluating the model... ({}/{})'.format(step, total_steps))
+
+            step += 1
+
+            metrics = {}
+            for metric in logs[0].keys():
+                metrics[metric] = sum([log[metric] for log in logs]) / len(logs)
+
+            return metrics
         # return predicted_triples
     # --------------yf-------------------
 
@@ -511,7 +451,6 @@ class HAKE(KGEModel):
         phase_head = phase_head / (self.embedding_range.item() / self.pi)
         phase_relation = phase_relation / (self.embedding_range.item() / self.pi)
         phase_tail = phase_tail / (self.embedding_range.item() / self.pi)
-
         if batch_type == BatchType.HEAD_BATCH:
             phase_score = phase_head + (phase_relation - phase_tail)
         else:
@@ -528,4 +467,3 @@ class HAKE(KGEModel):
         r_score = torch.norm(r_score, dim=2) * self.modulus_weight
 
         return self.gamma.item() - (phase_score + r_score)
-        
